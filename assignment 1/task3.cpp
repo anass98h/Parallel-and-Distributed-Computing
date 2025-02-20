@@ -3,13 +3,44 @@
 #include <chrono>
 #include <stdexcept>
 #include <omp.h>
+#include <fstream>
+#include <random>
 
+
+void save_matrix_1d(std::vector<int> &matrix, std::string filename, int size)
+{
+    std::ofstream myFile("tests/" + filename);
+    for (int i = 0; i < size; i++)
+    {
+        for (int j = 0; j < size; j++)
+        {
+            myFile << matrix[i * size + j] << ",";
+        }
+        myFile << "\n";
+    }
+    myFile.close();
+}
+
+
+std::vector<int> generate_matrix_1d(int size, unsigned int seed)
+{
+    static std::mt19937 generator(seed);
+    std::uniform_int_distribution<int> distribution(1, 100);
+
+    int full_size = size * size;
+    std::vector<int> matrix(full_size);
+
+    for (int i = 0; i < full_size; i++)
+    {
+        matrix[i] = distribution(generator);
+    }
+
+    return matrix;
+}
 
 // Threshold to switch to the direct (triple-nested) multiply.
 // You can tune this depending on cache sizes.
 static const int BLOCK_SIZE = 1024;
-
-
 
 void matmulRecHelper(const int* A, const int* B, int* C,
                      int n, int offsetA, int offsetB, int offsetC)
@@ -111,19 +142,8 @@ int main()
 {
     int SIZE_OF_MATRIX = 3072;
 
-    // Allocate vectors for matrices
-    std::vector<int> matrix1(SIZE_OF_MATRIX * SIZE_OF_MATRIX);
-    std::vector<int> matrix2(SIZE_OF_MATRIX * SIZE_OF_MATRIX);
-
-    // Initialize matrix1 and matrix2 with (random) or fixed numbers
-    for (int i = 0; i < SIZE_OF_MATRIX; i++)
-    {
-        for (int j = 0; j < SIZE_OF_MATRIX; j++)
-        {
-            matrix1[i * SIZE_OF_MATRIX + j] = 1;
-            matrix2[i * SIZE_OF_MATRIX + j] = 1;
-        }
-    }
+    std::vector<int> matrix1 = generate_matrix_1d(SIZE_OF_MATRIX, 1);
+    std::vector<int> matrix2 = generate_matrix_1d(SIZE_OF_MATRIX, 1);
 
     auto start = std::chrono::high_resolution_clock::now();
     std::vector<int> targetMatrix = matmulRec(matrix1, matrix2, SIZE_OF_MATRIX);
@@ -135,8 +155,12 @@ int main()
     std::cout << "--------------RESULTS------------------" << std::endl;
     std::cout << "SIZE OF MATRIX = " << SIZE_OF_MATRIX << std::endl;
     std::cout << "BLOCK SIZE = " << BLOCK_SIZE << std::endl;
-    std::cout << "targetMatrix[0] = " << targetMatrix[0] << std::endl;
     std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
-    std::cout << "----------------------------------------" << std::endl;
+
+    save_matrix_1d(matrix1, "matrix1.csv", SIZE_OF_MATRIX);
+    save_matrix_1d(matrix2, "matrix2.csv", SIZE_OF_MATRIX);
+    save_matrix_1d(targetMatrix, "result.csv", SIZE_OF_MATRIX);
     return 0;
 }
+
+

@@ -4,6 +4,12 @@ Parallel and Distributed Computing
 
 ## Running the programs
 
+### Prerequisites
+1.) Ensure that you create the `/tests` folder next to the output of compiled task file. (eg. in /output)
+2.) Also update the ./test_matmul tests path if necesarry
+
+### Execution task
+
 Below is a single line command to run the task.
 
 ```sh

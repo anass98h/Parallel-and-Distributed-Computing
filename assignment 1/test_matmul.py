@@ -7,9 +7,9 @@ def read_csv_to_matrix(filename):
 
 
 current_folder = os.path.dirname(__file__)
-matrix1 = read_csv_to_matrix(os.path.join(current_folder, 'tests/matrix1.csv'))
-matrix2 = read_csv_to_matrix(os.path.join(current_folder, 'tests/matrix2.csv'))
-result_matrix = read_csv_to_matrix(os.path.join(current_folder, 'tests/result.csv'))
+matrix1 = read_csv_to_matrix(os.path.join(current_folder, 'output/tests/matrix1.csv'))
+matrix2 = read_csv_to_matrix(os.path.join(current_folder, 'output/tests/matrix2.csv'))
+result_matrix = read_csv_to_matrix(os.path.join(current_folder, 'output/tests/result.csv'))
 
 
 matrix1 = matrix1[:, :-1]
