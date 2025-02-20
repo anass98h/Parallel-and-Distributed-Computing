@@ -2,10 +2,12 @@
 #include <vector>
 #include <chrono>
 #include <stdexcept>
+#include "test_helper.h"
+#include "matrix_generator.h"
 
 // Threshold to switch to the direct (triple-nested) multiply.
 // You can tune this depending on cache sizes.
-static const int BLOCK_SIZE = 256;
+static const int BLOCK_SIZE = 64;
 
 // import numpy as np
 
@@ -135,19 +137,8 @@ int main()
 {
     int SIZE_OF_MATRIX = 1024;
 
-    // Allocate vectors for matrices
-    std::vector<int> matrix1(SIZE_OF_MATRIX * SIZE_OF_MATRIX);
-    std::vector<int> matrix2(SIZE_OF_MATRIX * SIZE_OF_MATRIX);
-
-    // Initialize matrix1 and matrix2 with (random) or fixed numbers
-    for (int i = 0; i < SIZE_OF_MATRIX; i++)
-    {
-        for (int j = 0; j < SIZE_OF_MATRIX; j++)
-        {
-            matrix1[i * SIZE_OF_MATRIX + j] = 1;
-            matrix2[i * SIZE_OF_MATRIX + j] = 1;
-        }
-    }
+    std::vector<int> matrix1 = generate_matrix_1d(SIZE_OF_MATRIX, 1);
+    std::vector<int> matrix2 = generate_matrix_1d(SIZE_OF_MATRIX, 1);
 
     auto start = std::chrono::high_resolution_clock::now();
     std::vector<int> targetMatrix = matmulRec(matrix1, matrix2, SIZE_OF_MATRIX);
@@ -159,9 +150,11 @@ int main()
     std::cout << "--------------RESULTS------------------" << std::endl;
     std::cout << "SIZE OF MATRIX = " << SIZE_OF_MATRIX << std::endl;
     std::cout << "BLOCK SIZE = " << BLOCK_SIZE << std::endl;
-    std::cout << "targetMatrix[0] = " << targetMatrix[0] << std::endl;
     std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
-    std::cout << "----------------------------------------" << std::endl;
+
+    save_matrix_1d(matrix1, "matrix1.csv", SIZE_OF_MATRIX);
+    save_matrix_1d(matrix2, "matrix2.csv", SIZE_OF_MATRIX);
+    save_matrix_1d(targetMatrix, "result.csv", SIZE_OF_MATRIX);
 
     return 0;
 }

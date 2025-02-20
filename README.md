@@ -7,7 +7,7 @@ Parallel and Distributed Computing
 Below is a single line command to run the task.
 
 ```sh
- ❯ g++ ./task1.cpp -o ./output/task1 -std=c++11 -O2 && ./output/task1 && python3.11 ./test_matmul.py
+ ❯ g++ ./task1.cpp -o ./output/task1 -std=c++11 -O2 && ./output/task1 && python3 ./test_matmul.py
 ```
 
 It consists out of 3 parts separated by `&&`:
