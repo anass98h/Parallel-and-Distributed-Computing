@@ -22,10 +22,13 @@ It consists out of 3 parts separated by `&&`:
 The results should look something similar like this:
 
 ```sh
+ ❯ g++ ./task2.cpp -o ./output/task2 -std=c++11 -O2 && ./output/task2 && python3.11 ./test_matmul.py
+
 --------------RESULTS------------------
 SIZE OF MATRIX = 1024
-Execution time: 1091 ms
-The result of the matrix multiplication is correct
-Execution time of numpy matmul: 5.29 ms
+BLOCK SIZE = 64
+Execution time: 121 ms
+The result of the matrix multiplication is correct (matches the result of the numpy.matmul())
+Execution time of numpy matmul: 6.74 ms
 ----------------------------------------
 ```
