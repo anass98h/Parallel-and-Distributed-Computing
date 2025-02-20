@@ -7,7 +7,6 @@
 // You can tune this depending on cache sizes.
 static const int BLOCK_SIZE = 256;
 
-
 // import numpy as np
 
 // def _matmul_rec(A, B, C, n):
@@ -21,7 +20,7 @@ static const int BLOCK_SIZE = 256;
 //     else:
 //         # Divide the matrix into quarters
 //         k = n // 2
-        
+
 //         # C11 = A11*B11 + A12*B21
 //         _matmul_rec(A,         B,         C,         k)
 //         _matmul_rec(A[:, k:],  B[k:, :],  C,         k)
@@ -51,7 +50,7 @@ static const int BLOCK_SIZE = 256;
  * larger 2D data. offsetA, offsetB, offsetC indicate how many elements
  * per row in each matrix (their "leading dimension").
  */
-void matmulRecHelper(const int* A, const int* B, int* C,
+void matmulRecHelper(const int *A, const int *B, int *C,
                      int n, int offsetA, int offsetB, int offsetC)
 {
     // IKJ version
@@ -75,22 +74,22 @@ void matmulRecHelper(const int* A, const int* B, int* C,
         int half = n / 2;
 
         // Offsets in A
-        const int* A11 = A;
-        const int* A12 = A + half;                 // shift right by half
-        const int* A21 = A + half * offsetA;       // shift down by half
-        const int* A22 = A21 + half;               // shift down and right
+        const int *A11 = A;
+        const int *A12 = A + half;           // shift right by half
+        const int *A21 = A + half * offsetA; // shift down by half
+        const int *A22 = A21 + half;         // shift down and right
 
         // Offsets in B
-        const int* B11 = B;
-        const int* B12 = B + half;                 // shift right by half
-        const int* B21 = B + half * offsetB;       // shift down by half
-        const int* B22 = B21 + half;               // shift down and right
+        const int *B11 = B;
+        const int *B12 = B + half;           // shift right by half
+        const int *B21 = B + half * offsetB; // shift down by half
+        const int *B22 = B21 + half;         // shift down and right
 
         // Offsets in C
-        int* C11 = C;
-        int* C12 = C + half;                       // shift right
-        int* C21 = C + half * offsetC;             // shift down
-        int* C22 = C21 + half;                     // shift down and right
+        int *C11 = C;
+        int *C12 = C + half;           // shift right
+        int *C21 = C + half * offsetC; // shift down
+        int *C22 = C21 + half;         // shift down and right
 
         // C11 = A11*B11 + A12*B21
         matmulRecHelper(A11, B11, C11, half, offsetA, offsetB, offsetC);
@@ -114,12 +113,12 @@ void matmulRecHelper(const int* A, const int* B, int* C,
  * Public interface: multiplies two n×n matrices A and B (in row-major order)
  * and returns the result in a new std::vector<int>.
  */
-std::vector<int> matmulRec(const std::vector<int>& A,
-                           const std::vector<int>& B, 
+std::vector<int> matmulRec(const std::vector<int> &A,
+                           const std::vector<int> &B,
                            int n)
 {
     // Sanity-check
-    if (static_cast<int>(A.size()) < n*n || static_cast<int>(B.size()) < n*n)
+    if (static_cast<int>(A.size()) < n * n || static_cast<int>(B.size()) < n * n)
     {
         throw std::runtime_error("Input matrices are too small for n×n multiplication.");
     }
@@ -163,5 +162,6 @@ int main()
     std::cout << "targetMatrix[0] = " << targetMatrix[0] << std::endl;
     std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
     std::cout << "----------------------------------------" << std::endl;
+
     return 0;
 }
