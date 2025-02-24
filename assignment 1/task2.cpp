@@ -2,8 +2,40 @@
 #include <vector>
 #include <chrono>
 #include <stdexcept>
-#include "test_helper.h"
-#include "matrix_generator.h"
+#include <random>
+#include <string>
+#include <fstream>
+
+std::vector<int> generate_matrix_1d(int size, unsigned int seed)
+{
+    static std::mt19937 generator(seed);
+    std::uniform_int_distribution<int> distribution(1, 100);
+
+    int full_size = size * size;
+    std::vector<int> matrix(full_size);
+
+    for (int i = 0; i < full_size; i++)
+    {
+        matrix[i] = distribution(generator);
+    }
+
+    return matrix;
+}
+
+void save_matrix_1d(std::vector<int> &matrix, std::string filename, int size)
+{
+    std::ofstream myFile("tests/" + filename);
+    for (int i = 0; i < size; i++)
+    {
+        for (int j = 0; j < size; j++)
+        {
+            myFile << matrix[i * size + j] << ",";
+        }
+        myFile << "\n";
+    }
+    myFile.close();
+}
+
 
 // Threshold to switch to the direct (triple-nested) multiply.
 // You can tune this depending on cache sizes.
@@ -119,13 +151,6 @@ std::vector<int> matmulRec(const std::vector<int> &A,
                            const std::vector<int> &B,
                            int n)
 {
-    // Sanity-check
-    if (static_cast<int>(A.size()) < n * n || static_cast<int>(B.size()) < n * n)
-    {
-        throw std::runtime_error("Input matrices are too small for n×n multiplication.");
-    }
-
-    // Allocate result (C) and initialize to 0
     std::vector<int> C(n * n, 0);
 
     // Recursively multiply full n×n blocks

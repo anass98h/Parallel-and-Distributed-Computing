@@ -1,8 +1,40 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
-#include "test_helper.h"
-#include "matrix_generator.h"
+#include <random>
+#include <string>
+#include <fstream>
+
+std::vector<std::vector<int>> generate_matrix_2d(int size, unsigned int seed)
+{
+    static std::mt19937 generator(seed);
+    std::uniform_int_distribution<int> distribution(1, 100);
+
+    std::vector<std::vector<int>> matrix(size, std::vector<int>(size));
+    for (int i = 0; i < size; i++)
+    {
+        for (int j = 0; j < size; j++)
+        {
+            matrix[i][j] = distribution(generator);
+        }
+    }
+    return matrix;
+}
+
+
+void save_matrix_2d(std::vector<std::vector<int>> &matrix, std::string filename)
+{
+    std::ofstream myFile("tests/" + filename);
+    for (int i = 0; i < matrix.size(); i++)
+    {
+        for (int j = 0; j < matrix[i].size(); j++)
+        {
+            myFile << matrix[i][j] << ",";
+        }
+        myFile << "\n";
+    }
+    myFile.close();
+}
 
 int main()
 {

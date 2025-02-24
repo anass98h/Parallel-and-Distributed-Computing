@@ -38,9 +38,11 @@ std::vector<int> generate_matrix_1d(int size, unsigned int seed)
     return matrix;
 }
 
+
 // Threshold to switch to the direct (triple-nested) multiply.
 // You can tune this depending on cache sizes.
-static const int BLOCK_SIZE = 1024;
+static const int BLOCK_SIZE = 64;
+static const int TASK_THRESHOLD = 5000;  // Only spawn tasks for blocks larger than this
 
 void matmulRecHelper(const int* A, const int* B, int* C,
                      int n, int offsetA, int offsetB, int offsetC)
@@ -48,7 +50,7 @@ void matmulRecHelper(const int* A, const int* B, int* C,
     // IKJ version
     if (n <= BLOCK_SIZE)
     {
-        #pragma omp parallel for schedule(dynamic, 4)
+        #pragma omp parallel for schedule(runtime)
         for (int i = 0; i < n; ++i)
         {
             for (int k = 0; k < n; ++k)
@@ -84,33 +86,47 @@ void matmulRecHelper(const int* A, const int* B, int* C,
         int* C21 = C + half * offsetC;             // shift down
         int* C22 = C21 + half;                     // shift down and right
 
-        // Use a taskgroup to group our eight recursive calls
-        //#pragma omp taskgroup
+        // Use a taskgroup to synchronize recursive tasks
+        #pragma omp taskgroup
         {
+            if (n > TASK_THRESHOLD)
+            {
+                // Spawn tasks for larger subproblems
+                #pragma omp task shared(A, B, C) untied
+                matmulRecHelper(A11, B11, C11, half, offsetA, offsetB, offsetC);
+                #pragma omp task shared(A, B, C) untied
+                matmulRecHelper(A12, B21, C11, half, offsetA, offsetB, offsetC);
 
-        // C11 = A11*B11 + A12*B21
-        //#pragma omp task shared(A,B,C) if (n > BLOCK_SIZE)
-        matmulRecHelper(A11, B11, C11, half, offsetA, offsetB, offsetC);
-        //#pragma omp task shared(A,B,C) if (n > BLOCK_SIZE)
-        matmulRecHelper(A12, B21, C11, half, offsetA, offsetB, offsetC);
+                #pragma omp task shared(A, B, C) untied
+                matmulRecHelper(A11, B12, C12, half, offsetA, offsetB, offsetC);
+                #pragma omp task shared(A, B, C) untied
+                matmulRecHelper(A12, B22, C12, half, offsetA, offsetB, offsetC);
 
-        // C12 = A11*B12 + A12*B22
-        //#pragma omp task shared(A,B,C) if (n > BLOCK_SIZE)
-        matmulRecHelper(A11, B12, C12, half, offsetA, offsetB, offsetC);
-        //#pragma omp task shared(A,B,C) if (n > BLOCK_SIZE)
-        matmulRecHelper(A12, B22, C12, half, offsetA, offsetB, offsetC);
+                #pragma omp task shared(A, B, C) untied
+                matmulRecHelper(A21, B11, C21, half, offsetA, offsetB, offsetC);
+                #pragma omp task shared(A, B, C) untied
+                matmulRecHelper(A22, B21, C21, half, offsetA, offsetB, offsetC);
 
-        // C21 = A21*B11 + A22*B21
-        //#pragma omp task shared(A,B,C) if (n > BLOCK_SIZE)
-        matmulRecHelper(A21, B11, C21, half, offsetA, offsetB, offsetC);
-        //#pragma omp task shared(A,B,C) if (n > BLOCK_SIZE)
-        matmulRecHelper(A22, B21, C21, half, offsetA, offsetB, offsetC);
+                #pragma omp task shared(A, B, C) untied
+                matmulRecHelper(A21, B12, C22, half, offsetA, offsetB, offsetC);
+                #pragma omp task shared(A, B, C) untied
+                matmulRecHelper(A22, B22, C22, half, offsetA, offsetB, offsetC);
+            }
+            else
+            {
+                // Execute sequentially to avoid task overhead on small subproblems
+                matmulRecHelper(A11, B11, C11, half, offsetA, offsetB, offsetC);
+                matmulRecHelper(A12, B21, C11, half, offsetA, offsetB, offsetC);
 
-        // C22 = A21*B12 + A22*B22
-        //#pragma omp task shared(A,B,C) if (n > BLOCK_SIZE)
-        matmulRecHelper(A21, B12, C22, half, offsetA, offsetB, offsetC);
-        //#pragma omp task shared(A,B,C) if (n > BLOCK_SIZE)
-        matmulRecHelper(A22, B22, C22, half, offsetA, offsetB, offsetC);
+                matmulRecHelper(A11, B12, C12, half, offsetA, offsetB, offsetC);
+                matmulRecHelper(A12, B22, C12, half, offsetA, offsetB, offsetC);
+
+                matmulRecHelper(A21, B11, C21, half, offsetA, offsetB, offsetC);
+                matmulRecHelper(A22, B21, C21, half, offsetA, offsetB, offsetC);
+
+                matmulRecHelper(A21, B12, C22, half, offsetA, offsetB, offsetC);
+                matmulRecHelper(A22, B22, C22, half, offsetA, offsetB, offsetC);
+            }
         }
     }
 }
@@ -123,44 +139,36 @@ std::vector<int> matmulRec(const std::vector<int>& A,
                            const std::vector<int>& B, 
                            int n)
 {
-    // Sanity-check
-    if (static_cast<int>(A.size()) < n*n || static_cast<int>(B.size()) < n*n)
-    {
-        throw std::runtime_error("Input matrices are too small for n×n multiplication.");
-    }
-
-    // Allocate result (C) and initialize to 0
     std::vector<int> C(n * n, 0);
 
-    // Recursively multiply full n×n blocks
 
     matmulRecHelper(A.data(), B.data(), C.data(), n, n, n, n);
+
     return C;
 }
 
 int main()
 {
-    int SIZE_OF_MATRIX = 3072;
+    int SIZE_OF_MATRIX = 1024;
+
+    omp_set_num_threads(omp_get_max_threads());  // Set number of threads
 
     std::vector<int> matrix1 = generate_matrix_1d(SIZE_OF_MATRIX, 1);
     std::vector<int> matrix2 = generate_matrix_1d(SIZE_OF_MATRIX, 1);
 
-    auto start = std::chrono::high_resolution_clock::now();
+	double startTime = omp_get_wtime();
     std::vector<int> targetMatrix = matmulRec(matrix1, matrix2, SIZE_OF_MATRIX);
-    auto end = std::chrono::high_resolution_clock::now();
-
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+	double endTime = omp_get_wtime();
+    double duration = (endTime - startTime) * 1000;
 
     // Print results
     std::cout << "--------------RESULTS------------------" << std::endl;
     std::cout << "SIZE OF MATRIX = " << SIZE_OF_MATRIX << std::endl;
     std::cout << "BLOCK SIZE = " << BLOCK_SIZE << std::endl;
-    std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
+    std::cout << "Execution time: " << duration << " ms" << std::endl;
 
     save_matrix_1d(matrix1, "matrix1.csv", SIZE_OF_MATRIX);
     save_matrix_1d(matrix2, "matrix2.csv", SIZE_OF_MATRIX);
     save_matrix_1d(targetMatrix, "result.csv", SIZE_OF_MATRIX);
     return 0;
 }
-
-
