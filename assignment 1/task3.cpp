@@ -41,8 +41,8 @@ std::vector<int> generate_matrix_1d(int size, unsigned int seed)
 
 // Threshold to switch to the direct (triple-nested) multiply.
 // You can tune this depending on cache sizes.
-static const int BLOCK_SIZE = 64;
-static const int TASK_THRESHOLD = 5000;  // Only spawn tasks for blocks larger than this
+static const int BLOCK_SIZE = 256;
+static const int TASK_THRESHOLD = 512;  // Only spawn tasks for blocks larger than this
 
 void matmulRecHelper(const int* A, const int* B, int* C,
                      int n, int offsetA, int offsetB, int offsetC)
@@ -149,7 +149,7 @@ std::vector<int> matmulRec(const std::vector<int>& A,
 
 int main()
 {
-    int SIZE_OF_MATRIX = 1024;
+    int SIZE_OF_MATRIX = 3072;
 
     omp_set_num_threads(omp_get_max_threads());  // Set number of threads
 
