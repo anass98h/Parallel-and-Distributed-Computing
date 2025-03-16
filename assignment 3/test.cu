@@ -4,34 +4,50 @@
 #include <random>
 #include <string>
 #include <fstream>
+#include <thrust/system_error.h>
+#include <thrust/system/cuda/error.h>
+#include <sstream>
+#include <omp.h>
 
-#define TILE_WIDTH 16
+void throw_on_cuda_error(cudaError_t code, const char *file, int line)
+{
+  if(code != cudaSuccess)
+  {
+    std::stringstream ss;
+    ss << file << "(" << line << ")";
+    std::string file_and_line;
+    ss >> file_and_line;
+    throw thrust::system_error(code, thrust::cuda_category(), file_and_line);
+  }
+}
 
-std::vector<std::vector<int>> generate_matrix_2d(int size, unsigned int seed)
+#define threads 32
+#define TILE_SIZE 32
+
+std::vector<int> generate_matrix_1d(int size, unsigned int seed)
 {
     static std::mt19937 generator(seed);
     std::uniform_int_distribution<int> distribution(1, 100);
 
-    std::vector<std::vector<int>> matrix(size, std::vector<int>(size));
+    int full_size = size * size;
+    std::vector<int> matrix(full_size);
+
+    for (int i = 0; i < full_size; i++)
+    {
+        matrix[i] = distribution(generator);
+    }
+
+    return matrix;
+}
+
+void save_matrix_1d(std::vector<int> &matrix, std::string filename, int size)
+{
+    std::ofstream myFile("tests/" + filename);
     for (int i = 0; i < size; i++)
     {
         for (int j = 0; j < size; j++)
         {
-            matrix[i][j] = distribution(generator);
-        }
-    }
-    return matrix;
-}
-
-
-void save_matrix_2d(std::vector<std::vector<int>> &matrix, std::string filename)
-{
-    std::ofstream myFile("tests/" + filename);
-    for (int i = 0; i < matrix.size(); i++)
-    {
-        for (int j = 0; j < matrix[i].size(); j++)
-        {
-            myFile << matrix[i][j] << ",";
+            myFile << matrix[i * size + j] << ",";
         }
         myFile << "\n";
     }
@@ -43,10 +59,11 @@ void save_matrix_2d(std::vector<std::vector<int>> &matrix, std::string filename)
 
 __global__ void matrixMultiplyKernel(int *A, int *B, int *C, int size)
 {
-    
+    // WHOAMI for each threads
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     
+    // 1. optimization: Boundary check for our matrix -> avoid control divergence
     if (row < size && col < size) {
         int sum = 0;
 
@@ -57,81 +74,120 @@ __global__ void matrixMultiplyKernel(int *A, int *B, int *C, int size)
     }
 }
 
-std::vector<std::vector<int>> cuda_matrix_multiply(
-    const std::vector<std::vector<int>> &A, 
-    const std::vector<std::vector<int>> &B
-) {
-   int size = A.size();
-   int *h_A = new int[size * size];
-   int *h_B = new int[size * size];
-   int *h_C = new int[size * size];
-  
-   // 2D -> 1D
-   for (int i = 0; i < size; i++) {
-    for (int j = 0; j < size; j++) {
-        h_A[i * size + j] = A[i][j];
-        h_B[i * size + j] = B[i][j];
+__global__ void matrixMultiplyKernelCoalesced(int *A, int *B, int *C, int size) {
+    __shared__ int A_tile[TILE_SIZE][TILE_SIZE];
+    __shared__ int B_tile[TILE_SIZE][TILE_SIZE];
+
+    int bx = blockIdx.x;
+    int by = blockIdx.y;
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    // position
+    int aRow = by * TILE_SIZE + ty;
+    int aCol = tx;
+    int bRow = ty;
+    int bCol = bx * TILE_SIZE + tx;
+    // output 
+    int cRow = aRow;
+    int cCol = bCol;
+
+    float sum = 0;
+
+    for (int t = 0; t < (size + TILE_SIZE - 1) / TILE_SIZE; t++) {
+        // Load tiles into shared memory in a coalesced manner
+        if (aRow < size && t * TILE_SIZE + aCol < size) {
+            A_tile[ty][tx] = A[aRow * size + (t * TILE_SIZE + aCol)];
+        } else {
+            A_tile[ty][tx] = 0;
+        }
+
+        if (t * TILE_SIZE + bRow < size && bCol < size) {
+            B_tile[ty][tx] = B[(t * TILE_SIZE + bRow) * size + bCol];
+        } else {
+            B_tile[ty][tx] = 0;
+        }
+
+        __syncthreads();
+
+        for (int k = 0; k < TILE_SIZE; k++) {
+            sum += A_tile[ty][k] * B_tile[k][tx];
+        }
+
+        __syncthreads();
     }
-   }
 
-   int *d_A, *d_B, *d_C;
-   cudaMalloc((void**)&d_A, size * size * sizeof(int));
-   cudaMalloc((void**)&d_B, size * size * sizeof(int));
-   cudaMalloc((void**)&d_C, size * size * sizeof(int));
+    // Write output if within bounds
+    if (cRow < size && cCol < size) {
+        C[cRow * size + cCol] = sum;
+    }
+}
 
-   cudaMemcpy(d_A, h_A, size * size * sizeof(int), cudaMemcpyHostToDevice);
-   cudaMemcpy(d_B, h_B, size * size * sizeof(int), cudaMemcpyHostToDevice);
+std::vector<int> cuda_matrix_multiply(
+    const std::vector<int> &A, 
+    const std::vector<int> &B, 
+    int size) {
 
-   dim3 blockSize(TILE_WIDTH, TILE_WIDTH);
-   dim3 gridSize((size + TILE_WIDTH - 1) / TILE_WIDTH, 
-   (size + TILE_WIDTH - 1) / TILE_WIDTH);
-
-   matrixMultiplyKernel<<<gridSize, blockSize>>>(d_A, d_B, d_C, size);
-   cudaDeviceSynchronize();
-
-   // cpy back to host
-   cudaMemcpy(h_C, d_C, size * size * sizeof(int), cudaMemcpyDeviceToHost);
-
-   // 1D -> 2D
-   std::vector<std::vector<int>> C(size, std::vector<int>(size));
-   for (int i = 0; i < size; i++) {
-       for (int j = 0; j < size; j++) {
-           C[i][j] = h_C[i * size + j];
-       }
-   }
-
-   cudaFree(d_A);
-   cudaFree(d_B);
-   cudaFree(d_C);
-
-   delete[] h_A;
-   delete[] h_B;
-   delete[] h_C;
-
-   return C;
+    int elements = size * size;
+    std::vector<int> C(elements, 0);
+    
+    int *d_A, *d_B, *d_C;
+    cudaMalloc((void**)&d_A, elements * sizeof(int));
+    cudaMalloc((void**)&d_B, elements * sizeof(int));
+    cudaMalloc((void**)&d_C, elements * sizeof(int));
+    
+    cudaMemcpy(d_A, A.data(), elements * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, B.data(), elements * sizeof(int), cudaMemcpyHostToDevice);
+    
+    dim3 THREADS(threads, threads); // <-- THREADS 16x16
+    dim3 BLOCKS((size + TILE_SIZE - 1) / TILE_SIZE, (size + TILE_SIZE - 1) / TILE_SIZE); // <-- BLOCKS 
+    
+    matrixMultiplyKernelCoalesced<<<BLOCKS, THREADS>>>(d_A, d_B, d_C, size);
+    cudaDeviceSynchronize(); // sync because kernel executation is async
+    
+    cudaMemcpy(C.data(), d_C, elements * sizeof(int), cudaMemcpyDeviceToHost);
+    
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+    
+    return C;
 }
 
 
 int main()
 {
-    int SIZE_OF_MATRIX = 1024;
-    std::vector<std::vector<int>> matrix1 = generate_matrix_2d(SIZE_OF_MATRIX, 1);
-    std::vector<std::vector<int>> matrix2 = generate_matrix_2d(SIZE_OF_MATRIX, 1);
-    std::vector<std::vector<int>> targetMatrix(SIZE_OF_MATRIX, std::vector<int>(SIZE_OF_MATRIX));
-    // <--- here 
-    auto start = std::chrono::high_resolution_clock::now();
-    targetMatrix = cuda_matrix_multiply(matrix1, matrix2);
-    auto end = std::chrono::high_resolution_clock::now();
-
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
+    try
+  {
+      
+      int SIZE_OF_MATRIX = 1024;
+      std::vector<int> matrix1 = generate_matrix_1d(SIZE_OF_MATRIX, 1);
+      std::vector<int> matrix2 = generate_matrix_1d(SIZE_OF_MATRIX, 1);
+      std::vector<int> targetMatrix;
+      
+    double startTime = omp_get_wtime();
+    // throw_on_cuda_error(cuda_matrix_multiply(matrix1, matrix2, SIZE_OF_MATRIX))
+    targetMatrix = cuda_matrix_multiply(matrix1, matrix2, SIZE_OF_MATRIX);
+    double endTime = omp_get_wtime();
+    double duration = (endTime - startTime) * 1000;
+  
     // Print results
     std::cout << "--------------RESULTS------------------" << std::endl;
     std::cout << "SIZE OF MATRIX = " << SIZE_OF_MATRIX << std::endl;
-    std::cout << "Execution time: " << duration.count() << " ms" << std::endl;
+    std::cout << "Execution time: " << duration << " ms" << std::endl;
 
-    save_matrix_2d(matrix1, "matrix1.csv");
-    save_matrix_2d(matrix2, "matrix2.csv");
-    save_matrix_2d(targetMatrix, "result.csv");
-    return 0;
+    // save_matrix_1d(matrix1, "matrix1.csv", SIZE_OF_MATRIX);
+    // save_matrix_1d(matrix2, "matrix2.csv", SIZE_OF_MATRIX);
+    // save_matrix_1d(targetMatrix, "result.csv", SIZE_OF_MATRIX);
+}catch(thrust::system_error &e){
+  std::cerr << "CUDA error after cudaSetDevice: " << e.what() << std::endl;
+  // oops, recover
+  cudaSetDevice(0);
 }
+
+return 0;
+}
+
+
+// nvcc test.cu -o test
+
+// __host__​cudaError_t cudaEventCreate ( cudaEvent_t* event, unsigned int  flags)
