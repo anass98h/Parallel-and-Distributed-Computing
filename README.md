@@ -5,8 +5,9 @@ Parallel and Distributed Computing
 ## Running the programs
 
 ### Prerequisites
-1.) Ensure that you create the `/tests` folder next to the output of compiled task file. (eg. in /output)
-2.) Also update the ./test_matmul tests path if necesarry
+
+1.) Ensure that you create the `/tests` folder next to the output of compiled task file. (eg. in /output) 2.) Also
+update the ./test_matmul tests path if necesarry
 
 ### Execution task
 
@@ -38,3 +39,12 @@ The result of the matrix multiplication is correct (matches the result of the nu
 Execution time of numpy matmul: 6.74 ms
 ----------------------------------------
 ```
+
+| #   | Size of Matrix | Avg. Kernel Execution Time (ms) |
+| --- | -------------- | ------------------------------- |
+| 1   | 128            | 1                               |
+| 2   | 256            | 10                              |
+| 3   | 512            | 106                             |
+| 4   | 1024           | 960                             |
+| 5   | 2048           | 26250                           |
+| 6   | 3072           | 79035                           |

@@ -2,15 +2,19 @@ import numpy as np
 import os
 import time
 
+# os.environ["OMP_NUM_THREADS"] = "1"
+# os.environ["MKL_NUM_THREADS"] = "1"
+# os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
+print(np.__config__.show())
+
 def read_csv_to_matrix(filename):
     return np.genfromtxt(filename, delimiter=',')
 
-
 current_folder = os.path.dirname(__file__)
-matrix1 = read_csv_to_matrix(os.path.join(current_folder, 'output/tests/matrix1.csv'))
-matrix2 = read_csv_to_matrix(os.path.join(current_folder, 'output/tests/matrix2.csv'))
-result_matrix = read_csv_to_matrix(os.path.join(current_folder, 'output/tests/result.csv'))
-
+matrix1 = read_csv_to_matrix(os.path.join(current_folder, 'tests/matrix1.csv'))
+matrix2 = read_csv_to_matrix(os.path.join(current_folder, 'tests/matrix2.csv'))
+result_matrix = read_csv_to_matrix(os.path.join(current_folder, 'tests/result.csv'))
 
 matrix1 = matrix1[:, :-1]
 matrix2 = matrix2[:, :-1]

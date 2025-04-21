@@ -6,20 +6,26 @@
 #include <omp.h>
 
 // Error-checking macro for CUDA calls
-#define CHECK_CUDA(call) do {                                    \
-    cudaError_t err = (call);                                    \
-    if (err != cudaSuccess) {                                    \
-        fprintf(stderr, "CUDA Error at %s:%d - %s\n",            \
-                __FILE__, __LINE__, cudaGetErrorString(err));    \
-        exit(EXIT_FAILURE);                                      \
-    } } while(0)
+#define CHECK_CUDA(call)                                          \
+    do                                                            \
+    {                                                             \
+        cudaError_t err = (call);                                 \
+        if (err != cudaSuccess)                                   \
+        {                                                         \
+            fprintf(stderr, "CUDA Error at %s:%d - %s\n",         \
+                    __FILE__, __LINE__, cudaGetErrorString(err)); \
+            exit(EXIT_FAILURE);                                   \
+        }                                                         \
+    } while (0)
 
-const int TILE_DIM = 32;  // Tile size (adjustable: 16 or 32 recommended)
+const int TILE_DIM = 32; // Tile size (adjustable: 16 or 32 recommended)
 
-// CUDA kernel for tiled matrix multiplication for square matrices (C = A * B)
-__global__
-void matMulTiled(const float* __restrict__ A, const float* __restrict__ B, 
-                 float* __restrict__ C, int N) {
+__global__ void matMulTiled(
+    const float *__restrict__ A,
+    const float *__restrict__ B,
+    float *__restrict__ C,
+    int N)
+{
     __shared__ float As[TILE_DIM][TILE_DIM];
     __shared__ float Bs[TILE_DIM][TILE_DIM];
 
@@ -29,9 +35,10 @@ void matMulTiled(const float* __restrict__ A, const float* __restrict__ B,
     float value = 0.0f;
 
     // Loop over tiles along the shared dimension (which is N here)
-    for (int t = 0; t < (N + TILE_DIM - 1) / TILE_DIM; ++t) {
-        int tiledCol = t * TILE_DIM + threadIdx.x;  // column index in A
-        int tiledRow = t * TILE_DIM + threadIdx.y;    // row index in B
+    for (int t = 0; t < (N + TILE_DIM - 1) / TILE_DIM; ++t)
+    {
+        int tiledCol = t * TILE_DIM + threadIdx.x; // column index in A
+        int tiledRow = t * TILE_DIM + threadIdx.y; // row index in B
 
         // Boundary check <- inside of our tile
         if (row < N && tiledCol < N)
@@ -48,20 +55,23 @@ void matMulTiled(const float* __restrict__ A, const float* __restrict__ B,
         __syncthreads();
 
         // Compute partial dot product for this tile
-        #pragma unroll
-        for (int i = 0; i < TILE_DIM; ++i) {
+#pragma unroll
+        for (int i = 0; i < TILE_DIM; ++i)
+        {
             value += As[threadIdx.y][i] * Bs[i][threadIdx.x];
         }
         __syncthreads();
     }
 
     // Write the result to global memory if within bounds
-    if (row < N && col < N) {
+    if (row < N && col < N)
+    {
         C[row * N + col] = value;
     }
 }
 
-int main() {
+int main()
+{
     int N = 1024;
 
     size_t bytes = N * N * sizeof(float);
@@ -91,6 +101,8 @@ int main() {
     CHECK_CUDA(cudaMemcpyAsync(d_A, h_A, bytes, cudaMemcpyHostToDevice, stream));
     CHECK_CUDA(cudaMemcpyAsync(d_B, h_B, bytes, cudaMemcpyHostToDevice, stream));
 
+    // REST OF CODE  .....
+
     // Configure grid and block dimensions
     dim3 block(TILE_DIM, TILE_DIM); // threads x threads -> eg 16x16
     dim3 grid((N + TILE_DIM - 1) / TILE_DIM, (N + TILE_DIM - 1) / TILE_DIM);
@@ -100,7 +112,7 @@ int main() {
     matMulTiled<<<grid, block, sharedMemoryForKernel, stream>>>(d_A, d_B, d_C, N);
     CHECK_CUDA(cudaPeekAtLastError());
     double endTime = omp_get_wtime();
-    double durationMS = (endTime - startTime) * 1000; 
+    double durationMS = (endTime - startTime) * 1000;
 
     // Copy result matrix C back to host asynchronously
     CHECK_CUDA(cudaMemcpyAsync(h_C, d_C, bytes, cudaMemcpyDeviceToHost, stream));
@@ -108,24 +120,27 @@ int main() {
     // Wait for all operations in the stream to finish
     CHECK_CUDA(cudaStreamSynchronize(stream));
 
-    std::cout << "Kernel execution time (excluding transfers): " 
+    std::cout << "Kernel execution time (excluding transfers): "
               << durationMS << " ms" << std::endl;
 
     // (Optional) Validate a few entries of the result for correctness
     bool correct = true;
-    for (int i = 0; i < 20 && correct; ++i) {
-        for (int j = 0; j < 20 && correct; ++j) {
+    for (int i = 0; i < 20 && correct; ++i)
+    {
+        for (int j = 0; j < 20 && correct; ++j)
+        {
             double ref = 0.0;
             for (int k = 0; k < N; ++k)
                 ref += h_A[i * N + k] * h_B[k * N + j];
-            if (fabs(h_C[i * N + j] - ref) > 1e-3) {
+            if (fabs(h_C[i * N + j] - ref) > 1e-3)
+            {
                 correct = false;
                 std::cerr << "Mismatch at (" << i << ", " << j << "): "
                           << h_C[i * N + j] << " vs " << ref << std::endl;
             }
         }
     }
-    
+
     if (correct)
         std::cout << "Result verification passed!" << std::endl;
     else
